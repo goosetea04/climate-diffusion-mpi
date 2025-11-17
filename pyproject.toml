@@ -11,6 +11,7 @@ requires-python = ">=3.11"
 dependencies = [
   "numpy",
   "mpi4py",
+  "netCDF4",
 ]
 
 [project.scripts]

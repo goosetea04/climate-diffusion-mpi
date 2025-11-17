@@ -7,6 +7,8 @@ import numpy as np
 from mpi4py import MPI
 
 from .driver import run_simulation
+from .grid import create_lat_lon_grid
+from .io_netcdf import write_temperature_netcdf
 
 
 def parse_args() -> argparse.Namespace:
@@ -21,10 +23,16 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--dt", type=float, default=0.01, help="Time step size.")
     parser.add_argument(
-        "--output",
+        "--output-npy",
         type=str,
         default="T_final.npy",
         help="Output filename for final temperature field (NumPy .npy).",
+    )
+    parser.add_argument(
+        "--output-nc",
+        type=str,
+        default="T_final.nc",
+        help="Output filename for final temperature field (NetCDF).",
     )
     return parser.parse_args()
 
@@ -47,6 +55,7 @@ def main() -> None:
         else:
             return
 
+    # Run parallel simulation
     T_final = run_simulation(
         nlat=args.nlat,
         nlon=args.nlon,
@@ -59,10 +68,19 @@ def main() -> None:
 
     # Only rank 0 writes results
     if rank == 0 and T_final is not None:
-        out_path = Path(args.output)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        np.save(out_path, T_final)
-        print(f"[rank 0] Saved final temperature field to {out_path}")
+        nlat, nlon = T_final.shape
+        lat, lon = create_lat_lon_grid(nlat, nlon)
+
+        # NPY output
+        npy_path = Path(args.output_npy)
+        npy_path.parent.mkdir(parents=True, exist_ok=True)
+        np.save(npy_path, T_final)
+        print(f"[rank 0] Saved final temperature field to {npy_path}")
+
+        # NetCDF output
+        nc_path = Path(args.output_nc)
+        write_temperature_netcdf(nc_path, T_final, lat, lon)
+        print(f"[rank 0] Saved final temperature field (NetCDF) to {nc_path}")
 
 
 if __name__ == "__main__":
