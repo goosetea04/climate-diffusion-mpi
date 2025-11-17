@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mini-climate-mpi"
+version = "0.1.0"
+description = "Toy 2D climate diffusion model with MPI parallelism"
+authors = [{ name = "Gusti Rais" }]
+requires-python = ">=3.11"
+dependencies = [
+  "numpy",
+  "mpi4py",
+]
+
+[project.scripts]
+mini-climate = "climate_mpi.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest"]
