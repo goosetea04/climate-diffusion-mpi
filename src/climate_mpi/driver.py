@@ -1,11 +1,9 @@
 from __future__ import annotations
-
 import numpy as np
 from mpi4py import MPI
-
 from .grid import initial_temperature_field
-from .physics import diffusion_step, simple_radiative_forcing
-from .parallel import compute_decomposition
+from .physics import diffusion_step_with_halos, simple_radiative_forcing
+from .parallel import compute_decomposition, exchange_halos
 
 
 def run_simulation(
@@ -17,24 +15,6 @@ def run_simulation(
     dx: float = 1.0,
     dy: float = 1.0,
 ) -> np.ndarray | None:
-    """
-    Run the parallel diffusion simulation.
-
-    Pattern:
-    - Rank 0 constructs the initial global field.
-    - Broadcast to all ranks.
-    - Each rank evolves its local longitude slice.
-    - Gather final field back to rank 0.
-
-    This is a toy model focusing on clear MPI patterns,
-    not a numerically sophisticated climate model.
-
-    Returns
-    -------
-    np.ndarray | None
-        Final global field on rank 0 (shape (nlat, nlon)),
-        None on other ranks.
-    """
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     size = comm.Get_size()
@@ -57,29 +37,33 @@ def run_simulation(
     local_nlon = decomp.counts[rank]
     end = start + local_nlon
 
+    # local slice
     T_local = T_global[:, start:end].copy()  # (nlat, local_nlon)
 
-    # 4. Time integration loop
+    # 4. Time integration loop with halo exchange
     for _ in range(nt):
-        T_local = diffusion_step(
-            T_local,
+        # get extended field with halos from neighbours
+        T_ext = exchange_halos(T_local, comm)
+
+        # perform diffusion using halos for correct stencils
+        T_local = diffusion_step_with_halos(
+            T_ext,
             kappa=kappa,
             dt=dt,
             dx=dx,
             dy=dy,
         )
+
+        # apply forcing locally
         T_local = simple_radiative_forcing(T_local, dt=dt)
 
-    # 5. Gather results back to rank 0 using Gatherv
+    # 5. Gather results back to rank 0 using Gatherv (unchanged)
 
-    # Flatten local array for communication
-    sendbuf = T_local.ravel()  # length nlat * local_nlon
+    sendbuf = T_local.ravel()
 
-    # Counts & displacements in *elements*
-    counts_cols = decomp.counts  # per-rank number of columns
+    counts_cols = decomp.counts
     counts_el = [nlat * c for c in counts_cols]
 
-    # displs in columns, then convert to elements
     displs_cols = []
     running = 0
     for c in counts_cols:
