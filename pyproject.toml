@@ -12,6 +12,7 @@ dependencies = [
   "numpy",
   "mpi4py",
   "netCDF4",
+  "pytest",
 ]
 
 [project.scripts]
